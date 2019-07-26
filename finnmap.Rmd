@@ -1,0 +1,130 @@
+
+```{r}
+install.packages("sp")
+library(sp)
+install.packages("mapproj")
+library(mapproj)
+install.packages("ggplot2")
+library(ggplot2)
+install.packages("maptools")
+library(maptools)
+install.packages("raster")#for bind
+library(raster)
+install.packages("rgeos")#for gcentroid
+library("rgeos")
+```
+
+#Loading rds for FINLAND level 2: Maakuntas 
+#with anomalies: Uusimaa &Ita Uusimaa divided, three Päijät-Häme divisions.
+#Shows 21 regions where the actual number is 18
+```{r}
+fin<-readRDS("gadm36_FIN_2_sp.rds")
+```
+
+```{r}
+fin@data$NAME_2
+```
+
+#Ita-Uusimaa name to 0
+#Extra Paijat Hame set to 0
+```{r}
+fin@data$NAME_2[8]<-NA
+fin@data$NAME_2[10]<-NA
+fin@data$NAME_2[17]<-NA
+```
+
+#Merging of the Ita-Uusimaa(8) and Uusimma(12) &
+#merging of three Paijat Hame regions (3,10,17) by repeating indices
+```{r}
+fin1<-c( 1 , 2  ,3 , 4 , 5 , 6 , 7, 12  ,9 ,3, 11 ,12 ,13 ,14, 15, 16 ,3 ,18 ,19, 20, 21)
+fin.u<-unionSpatialPolygons(fin,fin1) #class SP
+```
+
+#A dataframe with merged rows removed 
+```{r}
+fin.df.1<-fin@data[!is.na(fin@data$NAME_2),]
+```
+
+#Converting SP and DF to SPDF 
+```{r}
+fin.u.spd<-SpatialPolygonsDataFrame(fin.u,fin.df.1)
+```
+
+#Loading rds files for ALAND level 0
+```{r}
+aland<-readRDS("gadm36_ALA_0_sp.rds") #level zero
+```
+
+#Merging Finland and Aland SPDFs
+```{r}
+fin.ala<-bind(fin.u.spd,aland)
+```
+
+
+```{r}
+#plot(fin.ala)
+```
+
+#Inserting English names
+```{r}
+fin.ala@data$NAME_2[19]<-"Aland"
+fin.ala@data$VARNAME_2[19]<- "Ahvenanmaa|Åland"
+```
+
+
+
+#Neighbouring nations
+```{r}
+#Loading rds file for SWEDEN level 0
+swed<-readRDS("gadm36_SWE_0_sp.rds")
+
+#Loading rds file for RUSSIA level 0
+rus<-readRDS("gadm36_RUS_0_sp.rds")
+
+#Loading rds file for NORWAY level 0
+nor<-readRDS("gadm36_NOR_0_sp.rds")
+
+#Loading rds file for ESTONIA level 0
+est<-readRDS("gadm36_EST_0_sp.rds")
+```
+
+
+#longitude and latidue for centres
+```{r}
+centroids<-gCentroid(fin.ala, byid=TRUE)
+x0 <- coordinates(centroids)[,1]
+y0 <- coordinates(centroids)[,2]
+```
+
+#extracting DF from SPDF for ggplot to read - results in dropping of columns with info
+```{r}
+fin.ala.df <- fortify(fin.ala,region="NAME_2")
+```
+
+
+#Data for population
+```{r}
+info<-read.csv("maakuntaa_population.csv")
+```
+
+#Adding population column
+```{r}
+fin.ala.df<-merge(fin.ala.df,info,by="id")
+```
+
+#Plotting
+```{r}
+map1<-ggplot(data = fin.ala.df,aes(x = long, y = lat, group=group,fill =pop) )+coord_map(xlim = c(18,33), ylim = c(59,70.5))
+map2<-map1 + geom_polygon(color = "gray90", size = 0.1)
+map3<-map2+scale_fill_viridis_c(option = "plasma")
+map4<-map3+geom_polygon(data =rus, aes(x = long, y = lat, group = group), colour = "white", fill = "gray85",size=0.2)
+map5<-map4+geom_polygon(data =swed, aes(x = long, y = lat, group = group), colour = "white", fill = "gray85",size=0.2)
+map6<-map5+geom_polygon(data =nor, aes(x = long, y = lat, group = group), colour = "white", fill = "gray85",size=0.2)
+map7<-map6+geom_polygon(data =est, aes(x = long, y = lat, group = group), colour = "white", fill = "gray85",size=0.2)
+map8<-map7+geom_text(aes(label="RUSSIA",x=31,y=61),size=4)+geom_text(aes(label="NORWAY",x=24,y=69.5),size=4)+geom_text(aes(label="SWEDEN",x=20,y=67),size=4)
+png(file = "finnmap.png", width =2000, height=3000,units='px',res=300)
+map8
+dev.off()
+```
+
+
